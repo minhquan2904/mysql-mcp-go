@@ -1,0 +1,25 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?required}
+      MCP_RO_PASSWORD: ${MCP_RO_PASSWORD:?required}
+    volumes: [./deploy/mysql/init:/docker-entrypoint-initdb.d:ro, mysql-data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 5s
+      retries: 30
+  it:
+    profiles: [test]
+    image: golang:1.25
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /src
+    environment:
+      HOME: /tmp
+      GOCACHE: /cache/build
+      GOMODCACHE: /cache/mod
+      IT_DSN_RO: mcp_ro:${MCP_RO_PASSWORD}@tcp(mysql:3306)/testdb
+      IT_DSN_ROOT: root:${MYSQL_ROOT_PASSWORD}@tcp(mysql:3306)/testdb
+    volumes: [./:/src, "${HOME}/.cache/mtg:/cache"]
+    depends_on: {mysql: {condition: service_healthy}}
+volumes: {mysql-data: {}}

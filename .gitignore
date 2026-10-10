@@ -1,0 +1,6 @@
+.env
+/bin
+*.out
+.DS_Store
+.dev.env
+plans/
