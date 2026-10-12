@@ -1,6 +1,17 @@
 services:
   mysql:
     image: mysql:8.4
+    # Small-footprint settings for a test database on a shared host.
+    # performance_schema stays on: some tools read it.
+    command:
+      - --innodb-buffer-pool-size=64M
+      - --innodb-log-buffer-size=8M
+      - --max-connections=40
+      - --table-open-cache=256
+      - --table-definition-cache=400
+      - --performance-schema-error-size=0
+      - --performance-schema-max-memory-classes=0
+      - --performance-schema-digests-size=2000
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?required}
       MCP_RO_PASSWORD: ${MCP_RO_PASSWORD:?required}

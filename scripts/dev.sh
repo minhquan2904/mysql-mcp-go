@@ -75,19 +75,27 @@ case "$cmd" in
   down)
     rsh "docker compose down $(q "$@")"
     ;;
+  stop)
+    rsh "docker compose stop"
+    ;;
   logs)
     rsh "docker compose logs $(q "$@")"
     ;;
   it)
     sync_up
-    rsh "HOST_UID=\$(id -u) HOST_GID=\$(id -g) docker compose --profile test run --rm it go test -tags=integration -count=1 -p 1 ./... $(q "$@")"
+    # The test DB starts on demand (depends_on) and is stopped afterwards to
+    # free memory on a shared host; set KEEP_DB=1 to leave it running.
+    status=0
+    rsh "HOST_UID=\$(id -u) HOST_GID=\$(id -g) docker compose --profile test run --rm it go test -tags=integration -count=1 -p 1 ./... $(q "$@")" || status=$?
+    [ "${KEEP_DB:-0}" = 1 ] || rsh "docker compose stop mysql >/dev/null 2>&1" || true
+    exit $status
     ;;
   e2e)
     sync_up
     rsh "scripts/e2e.sh"
     ;;
   *)
-    echo "usage: dev.sh {sync|test [args]|go <args>|vuln|fuzz <pkg> <Fuzz>|up|down [-v]|logs|it [args]|e2e}" >&2
+    echo "usage: dev.sh {sync|test [args]|go <args>|vuln|fuzz <pkg> <Fuzz>|up|down [-v]|stop|logs|it [args] (KEEP_DB=1 keeps the DB up)|e2e}" >&2
     exit 2
     ;;
 esac
