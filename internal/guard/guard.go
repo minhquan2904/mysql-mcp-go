@@ -305,3 +305,16 @@ func isIdent(t token) bool          { return t.kind == kWord || t.kind == kQuote
 // isName: identifier-like token. A "..." literal counts because it is an
 // identifier under ANSI_QUOTES, which the server may enable; '...' never does.
 func isName(t token) bool { return isIdent(t) || (t.kind == kString && t.dq) }
+
+// StartsWithSelect reports whether the statement begins (after comments and
+// opening parentheses) with SELECT or WITH. It is a syntax-shape check for
+// callers that wrap the statement (EXPLAIN FORMAT=JSON <sql>); it does not
+// replace Check.
+func StartsWithSelect(sql string) bool {
+	toks, _ := lex(sql, true) // tokens before an error are still valid
+	i := 0
+	for i < len(toks) && isSym(toks[i], "(") {
+		i++
+	}
+	return i < len(toks) && toks[i].kind == kWord && (toks[i].text == "SELECT" || toks[i].text == "WITH")
+}

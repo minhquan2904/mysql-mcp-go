@@ -232,3 +232,39 @@ func FuzzCheck(f *testing.F) {
 		}
 	})
 }
+
+func TestStartsWithSelect(t *testing.T) {
+	for sql, want := range map[string]bool{
+		"SELECT 1":                              true,
+		"  select * from t;":                    true,
+		"(SELECT 1) UNION (SELECT 2)":           true,
+		"((SELECT 1))":                          true,
+		"WITH c AS (SELECT 1) SELECT * FROM c":  true,
+		"/* c */ SELECT 1":                      true,
+		"-- c\nSELECT 1":                        true,
+		"# c\nSELECT 1":                         true,
+		"SHOW TABLES":                           false,
+		"EXPLAIN SELECT 1":                      false,
+		"EXPLAIN ANALYZE SELECT 1":              false,
+		"DESC orders":                           false,
+		"DESCRIBE SELECT 1":                     false,
+		"":                                      false,
+		"((":                                    false,
+		"'SELECT'":                              false,
+		"`SELECT` 1":                            false,
+		"/*!50000 SELECT 1 */":                  false,
+		"SELECT 'unterminated":                  true, // first token is still SELECT; Check rejects the statement
+		"UPDATE t SET a=1":                      false,
+		"\xff SELECT 1":                         false,
+		"SELECTED 1":                            false,
+		"WITHOUT 1":                             false,
+		"(":                                     false,
+		"-- only a comment":                     false,
+		"SELECT/**/1":                           true,
+		"WITH RECURSIVE c AS (SELECT 1) SELECT": true,
+	} {
+		if got := StartsWithSelect(sql); got != want {
+			t.Errorf("StartsWithSelect(%q) = %v, want %v", sql, got, want)
+		}
+	}
+}

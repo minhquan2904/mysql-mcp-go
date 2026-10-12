@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -103,7 +104,11 @@ func parseScalars(env map[string]string) (Config, error) {
 
 	for o := range strings.SplitSeq(env["ALLOWED_ORIGINS"], ",") {
 		if o = strings.TrimSpace(o); o != "" {
-			cfg.AllowedOrigins = append(cfg.AllowedOrigins, o)
+			origin, err := parseOrigin(o)
+			if err != nil {
+				return Config{}, err
+			}
+			cfg.AllowedOrigins = append(cfg.AllowedOrigins, origin)
 		}
 	}
 
@@ -133,6 +138,28 @@ func parseScalars(env map[string]string) (Config, error) {
 		return Config{}, errors.New("LOG_LEVEL must be one of debug, info, warn, error")
 	}
 	return cfg, nil
+}
+
+// parseOrigin validates one ALLOWED_ORIGINS entry: scheme://host[:port] with
+// http or https and nothing else, as browsers send in the Origin header. It
+// returns the lowercase form that OriginCheck compares against.
+func parseOrigin(o string) (string, error) {
+	bad := fmt.Errorf("ALLOWED_ORIGINS: invalid origin %q: want scheme://host[:port] with http or https (no path, query or credentials)", o)
+	u, err := url.Parse(o)
+	if err != nil {
+		return "", bad
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if (scheme != "http" && scheme != "https") || u.Opaque != "" || u.User != nil ||
+		u.Hostname() == "" || u.Path != "" || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return "", bad
+	}
+	if p := u.Port(); p != "" {
+		if n, err := strconv.Atoi(p); err != nil || n < 1 || n > 65535 {
+			return "", bad
+		}
+	}
+	return scheme + "://" + strings.ToLower(u.Host), nil
 }
 
 func positiveInt(env map[string]string, key string, def int) (int, error) {

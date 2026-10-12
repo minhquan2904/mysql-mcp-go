@@ -277,3 +277,45 @@ func TestConfigAndSourceDoNotPrintSecrets(t *testing.T) {
 		t.Errorf("log output lacks redacted fields: %s", outputs["slog json + text"])
 	}
 }
+
+func TestLoadAllowedOriginsNormalizes(t *testing.T) {
+	cfg, err := Load(baseEnv("ALLOWED_ORIGINS=HTTPS://App.Example.COM, http://localhost:3000,http://[::1]:8080"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"https://app.example.com", "http://localhost:3000", "http://[::1]:8080"}
+	if !reflect.DeepEqual(cfg.AllowedOrigins, want) {
+		t.Errorf("AllowedOrigins = %q, want %q", cfg.AllowedOrigins, want)
+	}
+}
+
+func TestLoadAllowedOriginsRejectsMalformed(t *testing.T) {
+	for _, bad := range []string{
+		"null",
+		"*",
+		"example.com",
+		"//example.com",
+		"ftp://example.com",
+		"file:///etc/passwd",
+		"https://example.com/",
+		"https://example.com/path",
+		"https://example.com?x=1",
+		"https://example.com#frag",
+		"https://user@example.com",
+		"https://",
+		"https://:8080",
+		"https://example.com:notaport",
+		"https://example.com:99999",
+		"https://exa mple.com",
+		"https://a.com,null",
+	} {
+		_, err := Load(baseEnv("ALLOWED_ORIGINS=" + bad))
+		if err == nil {
+			t.Errorf("ALLOWED_ORIGINS=%q accepted, want an error", bad)
+			continue
+		}
+		if !strings.Contains(err.Error(), "ALLOWED_ORIGINS") {
+			t.Errorf("ALLOWED_ORIGINS=%q: error %q does not name ALLOWED_ORIGINS", bad, err)
+		}
+	}
+}
