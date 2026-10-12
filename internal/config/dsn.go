@@ -124,3 +124,10 @@ func checkQueryKeys(raw string) error {
 	}
 	return nil
 }
+
+// NormalizeDSN is normalizeDSN for callers outside the package that hold a
+// raw DSN (integration tests); Load applies the same function to every
+// MYSQL_DSN_<NAME>.
+func NormalizeDSN(raw string, queryTimeout time.Duration) (dsn string, warnings []string, err error) {
+	return normalizeDSN(raw, queryTimeout)
+}

@@ -470,3 +470,14 @@ func FuzzNormalizeDSN(f *testing.F) {
 		checkNormalized(t, in, out, 30*time.Second)
 	})
 }
+
+func TestNormalizeDSNExported(t *testing.T) {
+	want, wantWarns := mustNormalize(t, "u:pw@tcp(h:3306)/db?multiStatements=true", 5*time.Second)
+	got, gotWarns, err := NormalizeDSN("u:pw@tcp(h:3306)/db?multiStatements=true", 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want || !reflect.DeepEqual(gotWarns, wantWarns) {
+		t.Errorf("NormalizeDSN = %q %v, want %q %v", got, gotWarns, want, wantWarns)
+	}
+}

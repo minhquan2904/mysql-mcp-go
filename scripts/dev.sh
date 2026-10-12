@@ -7,8 +7,8 @@ set -euo pipefail
 VM=${VM:?set VM=user@host in .dev.env or the environment}
 DIR=${DIR:-mysql-toolbox-go}
 # Pinned govulncheck version (update deliberately).
-VULN_VERSION=${VULN_VERSION:-v1.7.0}
-GO_IMAGE=${GO_IMAGE:-golang:1.25}
+VULN_VERSION=${VULN_VERSION:-v1.8.0}
+GO_IMAGE=${GO_IMAGE:-golang:1.26}
 
 cd "$(dirname "$0")/.."
 
@@ -16,7 +16,7 @@ cd "$(dirname "$0")/.."
 GO_RUN="docker run --rm -u \"\$(id -u):\$(id -g)\" -e HOME=/tmp -e GOCACHE=/cache/build -e GOMODCACHE=/cache/mod -v \"\$HOME/.cache/mtg:/cache\" -v \"\$PWD:/src\" -w /src $GO_IMAGE"
 
 # Quote args for the remote shell.
-q() { printf '%q ' "$@"; }
+q() { [ $# -eq 0 ] || printf '%q ' "$@"; }
 
 rsh() { ssh -o BatchMode=yes "$VM" "mkdir -p ~/.cache/mtg && cd $DIR && $1"; }
 
@@ -80,7 +80,7 @@ case "$cmd" in
     ;;
   it)
     sync_up
-    rsh "UID=\$(id -u) GID=\$(id -g) docker compose --profile test run --rm it go test -tags=integration -count=1 -p 1 ./... $(q "$@")"
+    rsh "HOST_UID=\$(id -u) HOST_GID=\$(id -g) docker compose --profile test run --rm it go test -tags=integration -count=1 -p 1 ./... $(q "$@")"
     ;;
   e2e)
     sync_up
