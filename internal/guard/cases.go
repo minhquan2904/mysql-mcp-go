@@ -31,6 +31,7 @@ var AllowCases = []string{
 	"SHOW TABLE STATUS LIKE 'o%'",
 	"SELECT 'processlist'",
 	"SELECT keyring_col, service_name FROM t",
+	"SELECT 'performance_schema', 'lock_data'",
 }
 
 // RejectCases must all fail Check with an error wrapping ErrNotReadOnly.
@@ -114,4 +115,25 @@ var RejectCases = []Case{
 	{"SELECT trx_query FROM information_schema.INNODB_TRX", "access to TRX_QUERY not allowed"},
 	{"SELECT SQL_TEXT FROM performance_schema.events_statements_history", "access to SQL_TEXT not allowed"},
 	{"SELECT PROCESSLIST_INFO FROM performance_schema.threads", "access to PROCESSLIST_INFO not allowed"},
+
+	// performance_schema is only read by the fixed-SQL tools, never through
+	// execute_sql: its digest, lock and thread tables carry raw literals
+	// (QUERY_SAMPLE_TEXT, LOCK_DATA) from every schema.
+	{"SELECT * FROM performance_schema.events_statements_summary_by_digest", "access to PERFORMANCE_SCHEMA not allowed"},
+	{"SELECT LOCK_DATA FROM performance_schema.data_locks", "access to LOCK_DATA not allowed"},
+	{"SELECT 1 FROM performance_schema.data_locks", "access to PERFORMANCE_SCHEMA not allowed"},
+	{"SELECT * FROM `performance_schema`.`data_locks`", "access to PERFORMANCE_SCHEMA not allowed"},
+	{"SELECT * FROM `Performance_Schema`.`DATA_LOCKS`", "access to PERFORMANCE_SCHEMA not allowed"},
+	{`SELECT * FROM "performance_schema"."data_locks"`, "access to PERFORMANCE_SCHEMA not allowed"},
+	{"SELECT 1 FROM performance_schema . data_locks", "access to PERFORMANCE_SCHEMA not allowed"},
+	{"SHOW TABLES FROM performance_schema", "access to PERFORMANCE_SCHEMA not allowed"},
+	{"SELECT * FROM events_statements_summary_by_digest", "access to EVENTS_STATEMENTS_SUMMARY_BY_DIGEST not allowed"},
+	{"SELECT * FROM `events_statements_summary_by_digest`", "access to EVENTS_STATEMENTS_SUMMARY_BY_DIGEST not allowed"},
+	{"SELECT * FROM data_locks", "access to DATA_LOCKS not allowed"},
+	{"SELECT * FROM data_lock_waits", "access to DATA_LOCK_WAITS not allowed"},
+	{"SELECT * FROM table_io_waits_summary_by_table", "access to TABLE_IO_WAITS_SUMMARY_BY_TABLE not allowed"},
+	{"SELECT * FROM threads", "access to THREADS not allowed"},
+	{"SELECT * FROM prepared_statements_instances", "access to PREPARED_STATEMENTS_INSTANCES not allowed"},
+	{"SELECT lock_data FROM t", "access to LOCK_DATA not allowed"},
+	{"SELECT `LOCK_DATA` FROM t", "access to LOCK_DATA not allowed"},
 }

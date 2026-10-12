@@ -16,6 +16,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/minhquan2904/mysql-mcp-go/internal/guard"
+	"github.com/minhquan2904/mysql-mcp-go/internal/redact"
 	"github.com/minhquan2904/mysql-mcp-go/internal/source"
 )
 
@@ -196,4 +197,92 @@ func truncateSQL(s string) string {
 		cut--
 	}
 	return s[:cut] + "…"
+}
+
+// clampLimit applies the default to an absent limit and keeps the result in
+// [1, max] (max <= 0 means no upper bound).
+func clampLimit(p *int, def, max int) int {
+	n := def
+	if p != nil {
+		n = *p
+	}
+	if max > 0 && n > max {
+		n = max
+	}
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// nullableInt turns an absent number into SQL NULL (an untyped nil).
+func nullableInt(p *int, min int) any {
+	if p == nil {
+		return nil
+	}
+	return max(*p, min)
+}
+
+// checkSchema refuses a table_schema other than the database the source is
+// connected to (the schema named in its DSN; source.Open requires one). The
+// server-wide statistics tools use it so a caller cannot read another schema's
+// activity through them. A source without a database (not possible for an
+// opened source) refuses any schema: it fails closed.
+func checkSchema(d Deps, src, schema string) error {
+	if schema == "" {
+		return nil
+	}
+	s, err := d.Reg.Resolve(src)
+	if err != nil {
+		return userError{err}
+	}
+	if schema != s.Database {
+		return userError{fmt.Errorf("table_schema %q does not match the database this source is connected to", schema)}
+	}
+	return nil
+}
+
+// requirePerfSchema fails with a plain message when performance_schema is off,
+// instead of returning a misleading empty result. The variable cannot change
+// while the server runs, so a positive answer is remembered on the source; a
+// negative answer or a failed check is asked again next time.
+func requirePerfSchema(ctx context.Context, d Deps, src string) error {
+	s, err := d.Reg.Resolve(src)
+	if err != nil {
+		return userError{err}
+	}
+	if s.PerfSchemaVerified.Load() {
+		return nil
+	}
+	res, err := run(ctx, d, src, "SELECT @@global.performance_schema AS enabled")
+	if err != nil {
+		return err
+	}
+	if len(res.Rows) > 0 {
+		switch fmt.Sprint(res.Rows[0]["enabled"]) {
+		case "1", "ON":
+			s.PerfSchemaVerified.Store(true)
+			return nil
+		}
+	}
+	return userError{errors.New("enable performance_schema to run this tool")}
+}
+
+// maxQueryText bounds the statement text returned by the tools that show other
+// sessions' queries.
+const maxQueryText = 1024
+
+// redactColumn replaces the statement text in col with its redacted form
+// (literals removed, cut to maxQueryText runes). NULL stays NULL; a value that
+// is not text (binary) is not shown.
+func redactColumn(res *source.Result, col string) {
+	for _, row := range res.Rows {
+		switch v := row[col].(type) {
+		case nil:
+		case string:
+			row[col] = redact.SQL(v, maxQueryText)
+		default:
+			row[col] = "(not shown)"
+		}
+	}
 }

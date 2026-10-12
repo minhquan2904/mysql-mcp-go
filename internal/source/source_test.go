@@ -183,3 +183,36 @@ func TestEffectiveTimeout(t *testing.T) {
 		t.Errorf("parent expired: %v, want 0", got)
 	}
 }
+
+func TestDSNDatabase(t *testing.T) {
+	for dsn, want := range map[string]string{
+		"u:p@tcp(127.0.0.1:3306)/testdb":                "testdb",
+		"u:p@tcp(127.0.0.1:3306)/testdb?parseTime=true": "testdb",
+	} {
+		got, err := dsnDatabase(dsn)
+		if err != nil || got != want {
+			t.Errorf("dsnDatabase(%q) = %q, %v, want %q", dsn, got, err, want)
+		}
+	}
+	for _, dsn := range []string{"u:p@tcp(127.0.0.1:3306)/", "u:p@tcp(127.0.0.1:3306)", "not a dsn", ""} {
+		if got, err := dsnDatabase(dsn); err == nil {
+			t.Errorf("dsnDatabase(%q) = %q, nil, want an error", dsn, got)
+		}
+	}
+}
+
+// The tools that read server-wide statistics scope themselves to the DSN's
+// database, so a source without one is refused before any connection is made.
+func TestOpenRequiresDatabaseInDSN(t *testing.T) {
+	good := Limits{MaxRows: 1, MaxCellBytes: 1, MaxResultBytes: 1, MaxConcurrent: 1, Timeout: time.Second}
+	for _, dsn := range []string{"u:secretpw@tcp(127.0.0.1:1)/", "u:secretpw@tcp(127.0.0.1:1)", "u:secretpw@tcp(127.0.0.1:1)/?parseTime=true"} {
+		s, err := Open(context.Background(), config.Source{Name: "x", DSN: dsn}, good, nil)
+		if err == nil {
+			s.Close()
+			t.Fatalf("Open(%q) succeeded without a database", dsn)
+		}
+		if !strings.Contains(err.Error(), "database") && !strings.Contains(err.Error(), "invalid DSN") || strings.Contains(err.Error(), "secretpw") {
+			t.Errorf("Open(%q) error = %q, want one naming the database (or an invalid DSN) and no password", dsn, err)
+		}
+	}
+}

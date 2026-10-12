@@ -30,13 +30,19 @@ var (
 		"VERSION_TOKENS_", "KEYRING_", "AUDIT_LOG_", "GROUP_REPLICATION_",
 		"ASYNCHRONOUS_CONNECTION_FAILOVER_", "SERVICE_",
 	}
-	// Objects that expose other sessions' statement text. The server grants
-	// PROCESS for list_active_queries, which redacts literals; execute_sql
-	// must not be a way around that redaction.
+	// Objects that expose other sessions' statement text or data. The server
+	// grants PROCESS for list_active_queries and a few performance_schema
+	// tables for the other tools, which redact literals or select safe columns
+	// of fixed SQL; execute_sql must not be a way around that. The whole
+	// performance_schema schema is denied (the tools never go through the
+	// guard), plus the granted table names and LOCK_DATA so an unqualified
+	// reference (after USE) is caught too.
 	deniedIdents = set(
 		"PROCESSLIST", "INNODB_TRX", "EVENTS_STATEMENTS_CURRENT", "EVENTS_STATEMENTS_HISTORY",
 		"EVENTS_STATEMENTS_HISTORY_LONG", "PROCESSLIST_INFO", "SQL_TEXT", "QUERY_SAMPLE_TEXT",
 		"TRX_QUERY", "USER_VARIABLES_BY_THREAD", "SESSION_CONNECT_ATTRS",
+		"PERFORMANCE_SCHEMA", "EVENTS_STATEMENTS_SUMMARY_BY_DIGEST", "DATA_LOCKS", "DATA_LOCK_WAITS",
+		"TABLE_IO_WAITS_SUMMARY_BY_TABLE", "THREADS", "PREPARED_STATEMENTS_INSTANCES", "LOCK_DATA",
 	)
 	// SHOW is allowed only for these objects (anything may follow them).
 	showObjects = [][]string{

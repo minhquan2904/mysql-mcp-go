@@ -1,0 +1,24 @@
+mysql-mcp-go
+
+This product includes software derived from googleapis/mcp-toolbox
+(https://github.com/googleapis/mcp-toolbox), Copyright 2025 Google LLC,
+licensed under the Apache License, Version 2.0. The license text, as
+published in that repository at the commit below, is in
+third_party/mcp-toolbox/LICENSE.
+
+Derived from commit 0a7c1b1c110cc97ea9652d2fb1a7a7476b4be988
+(internal/tools/mysql/<dir>/<dir>.go). The SQL statements, parameter names,
+defaults and descriptions of these tools were ported; each ported file in
+internal/tools names its origin in a header comment:
+
+  list_tables                          mysqllisttables
+  list_active_queries                  mysqllistactivequeries
+  list_all_locks                       mysqllistalllocks
+  list_table_fragmentation             mysqllisttablefragmentation
+  list_tables_missing_unique_indexes   mysqllisttablesmissinguniqueindexes
+  list_table_stats                     mysqllisttablestats (rewritten on performance_schema)
+  show_query_stats                     mysqlshowquerystats
+
+Changes from the originals: statements run through this project's read-only
+executor, query text is redacted or limited to normalized digests, and
+list_table_stats no longer reads the sys schema.

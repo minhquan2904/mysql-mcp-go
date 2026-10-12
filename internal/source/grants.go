@@ -17,8 +17,9 @@ import (
 //     schemas mysql and sys (checked against wildcard patterns too, so
 //     `%`.* is rejected), and except whole-schema grants on
 //     performance_schema, whose tables expose other sessions' statements and
-//     user variables. Only table-level SELECT on performance_schema is
-//     allowed, which is how phase 6 grants what its tools read.
+//     user variables. On performance_schema only table-level grants on
+//     the tables listed in allowedPerfTables are accepted; any other table is
+//     a problem.
 //
 // Everything else is rejected: global SELECT, ALL PRIVILEGES, INSERT, UPDATE,
 // DELETE, DDL, FILE, SUPER, dynamic privileges (*_ADMIN), WITH GRANT OPTION,
@@ -89,19 +90,20 @@ func (g grant) object() string {
 	return "`" + g.db + "`." + t
 }
 
-// sensitivePerfTables are performance_schema tables that show other sessions'
-// statements (with literals), variables or connection attributes. Table-level
-// SELECT on them is rejected even though other performance_schema tables are
-// allowed (the phase 6 tools read events_statements_summary_by_digest, the
-// data_lock tables and threads, none of which are listed here).
-var sensitivePerfTables = map[string]bool{
-	"events_statements_current":      true,
-	"events_statements_history":      true,
-	"events_statements_history_long": true,
-	"user_variables_by_thread":       true,
-	"variables_by_thread":            true,
-	"session_connect_attrs":          true,
-	"session_account_connect_attrs":  true,
+// allowedPerfTables is the complete list of performance_schema tables the
+// account may be granted, one per tool that reads it (the tools run fixed SQL;
+// execute_sql cannot name performance_schema, see the guard):
+//
+//	data_locks                           list_all_locks (LOCK_DATA is never selected)
+//	table_io_waits_summary_by_table      list_table_stats
+//	events_statements_summary_by_digest  show_query_stats (DIGEST_TEXT only)
+//
+// Every other table is rejected: most of them show other sessions' statements
+// with literals, variables, locked key values or connection attributes.
+var allowedPerfTables = map[string]bool{
+	"data_locks":                          true,
+	"table_io_waits_summary_by_table":     true,
+	"events_statements_summary_by_digest": true,
 }
 
 var errRoleGrant = errors.New("roles not supported (grant privileges to the user directly)")
@@ -116,7 +118,7 @@ func checkGrant(n int, line string) []string {
 	}
 
 	var problems []string
-	usesSchema, usesSelect := false, false
+	usesSchema := false
 	for _, p := range g.privs {
 		switch {
 		case g.global() && (p == "USAGE" || p == "PROCESS"):
@@ -125,7 +127,6 @@ func checkGrant(n int, line string) []string {
 		case p == "USAGE":
 		case p == "SELECT" || p == "SHOW VIEW":
 			usesSchema = true
-			usesSelect = usesSelect || p == "SELECT"
 		default:
 			problems = append(problems, fmt.Sprintf("%s on %s is not allowed", p, g.object()))
 		}
@@ -140,8 +141,8 @@ func checkGrant(n int, line string) []string {
 			problems = append(problems, fmt.Sprintf("%s grants the whole performance_schema; grant individual tables", g.object()))
 		}
 	}
-	if usesSelect && !g.tableStar && sensitivePerfTables[strings.ToLower(g.table)] && schemaMatches(g.db, "performance_schema") {
-		problems = append(problems, fmt.Sprintf("SELECT on %s exposes other sessions' data and is not allowed", g.object()))
+	if usesSchema && !g.tableStar && !allowedPerfTables[strings.ToLower(g.table)] && schemaMatches(g.db, "performance_schema") {
+		problems = append(problems, fmt.Sprintf("%s is not one of the performance_schema tables the tools read and is not allowed", g.object()))
 	}
 	if g.grantOption {
 		problems = append(problems, fmt.Sprintf("WITH GRANT OPTION on %s is not allowed", g.object()))

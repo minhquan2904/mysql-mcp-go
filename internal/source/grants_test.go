@@ -149,14 +149,25 @@ func TestCheckGrantsSensitivePerformanceSchemaTables(t *testing.T) {
 	if err := CheckGrants([]string{"GRANT SELECT (`THREAD_ID`) ON `performance_schema`.`session_connect_attrs`" + tou}); err == nil {
 		t.Error("column-level SELECT on a sensitive table accepted")
 	}
-	// tables the phase 6 tools read stay allowed, as do same-named tables elsewhere
-	for _, table := range []string{
-		"events_statements_summary_by_digest", "data_locks", "data_lock_waits", "threads",
-		"table_io_waits_summary_by_table",
-	} {
+	// only the tables the tools read are allowed; every other performance_schema
+	// table is rejected by name, including ones that are not on the sensitive list
+	for _, table := range []string{"events_statements_summary_by_digest", "data_locks", "table_io_waits_summary_by_table"} {
 		if err := CheckGrants([]string{"GRANT SELECT ON `performance_schema`.`" + table + "`" + tou}); err != nil {
 			t.Errorf("%s: %v, want nil", table, err)
 		}
+	}
+	for _, table := range []string{
+		"data_lock_waits", "threads", "prepared_statements_instances", "events_waits_current", "users",
+		"events_statements_summary_by_thread_by_event_name", "metadata_locks", "DATA_LOCK_WAITS",
+	} {
+		err := CheckGrants([]string{"GRANT SELECT ON `performance_schema`.`" + table + "`" + tou})
+		if err == nil || !strings.Contains(err.Error(), table) {
+			t.Errorf("%s: err = %v, want it rejected by name", table, err)
+		}
+	}
+	// SHOW VIEW on a table outside the list is refused as well
+	if err := CheckGrants([]string{"GRANT SHOW VIEW ON `performance_schema`.`threads`" + tou}); err == nil {
+		t.Error("SHOW VIEW on performance_schema.threads accepted")
 	}
 	if err := CheckGrants([]string{"GRANT SELECT ON `testdb`.`variables_by_thread`" + tou}); err != nil {
 		t.Errorf("same table name in another schema: %v, want nil", err)

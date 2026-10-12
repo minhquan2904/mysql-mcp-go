@@ -38,7 +38,16 @@ var ErrQueryTimeout = errors.New("query exceeded timeout")
 // Source is one MySQL database: a query pool plus a separate pool that only
 // issues KILL QUERY, so a saturated query pool can never block a kill.
 type Source struct {
-	Name   string
+	Name string
+	// Database is the schema named in the DSN (Open requires one). Tools that
+	// read server-wide statistics scope themselves to it.
+	Database string
+
+	// PerfSchemaVerified is set by the tools once they have seen
+	// performance_schema enabled: the variable cannot change while the server
+	// runs, so the check is not repeated.
+	PerfSchemaVerified atomic.Bool
+
 	db     *sql.DB
 	killer *sql.DB
 	lim    Limits
@@ -68,6 +77,11 @@ func Open(ctx context.Context, cfg config.Source, lim Limits, log *slog.Logger) 
 		log = slog.New(slog.DiscardHandler)
 	}
 
+	database, err := dsnDatabase(cfg.DSN)
+	if err != nil {
+		return nil, fmt.Errorf("source %s: %w", cfg.Name, err)
+	}
+
 	db, err := sql.Open("mysql", cfg.DSN)
 	if err != nil {
 		return nil, fmt.Errorf("source %s: invalid DSN", cfg.Name)
@@ -86,7 +100,7 @@ func Open(ctx context.Context, cfg config.Source, lim Limits, log *slog.Logger) 
 	killer.SetMaxOpenConns(killerConns)
 	killer.SetMaxIdleConns(killerConns)
 
-	s := &Source{Name: cfg.Name, db: db, killer: killer, lim: lim, log: log}
+	s := &Source{Name: cfg.Name, Database: database, db: db, killer: killer, lim: lim, log: log}
 	for _, p := range []*sql.DB{db, killer} {
 		pctx, cancel := context.WithTimeout(ctx, pingTimeout)
 		err := p.PingContext(pctx)
@@ -283,4 +297,18 @@ func effectiveTimeout(ctx context.Context, limit time.Duration) time.Duration {
 		return min(limit, max(time.Until(dl), 0))
 	}
 	return limit
+}
+
+// dsnDatabase returns the schema named in a DSN. A DSN that does not parse or
+// names no database is an error: the tools that read server-wide statistics
+// scope themselves to this schema and must not fall back to "any schema".
+func dsnDatabase(dsn string) (string, error) {
+	c, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return "", errors.New("invalid DSN")
+	}
+	if c.DBName == "" {
+		return "", errors.New("the DSN must name a database (user:pass@tcp(host:port)/dbname)")
+	}
+	return c.DBName, nil
 }
