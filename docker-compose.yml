@@ -20,6 +20,20 @@ services:
       test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h 127.0.0.1 -uroot --silent"]
       interval: 5s
       retries: 30
+  mcp:
+    build: .
+    image: mysql-toolbox-go
+    environment:
+      MYSQL_DSN_TESTDB: mcp_ro:${MCP_RO_PASSWORD}@tcp(mysql:3306)/testdb
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:?required}
+      MAX_ROWS: ${MAX_ROWS:-1000}
+      QUERY_TIMEOUT: ${QUERY_TIMEOUT:-30s}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+    ports: ["${BIND_IP:-127.0.0.1}:8080:8080"]
+    depends_on: {mysql: {condition: service_healthy}}
+    restart: unless-stopped
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
   it:
     profiles: [test]
     image: golang:1.26
