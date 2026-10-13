@@ -525,7 +525,8 @@ func kvTable(rows []pair) string {
 }
 
 // renderSummary builds the README snippet: the metrics the inputs can fill,
-// then a line naming the machine and the commit they came from.
+// the full load table, then a line naming the machine and the commit they came
+// from.
 func renderSummary(rows []loadRow, meta []pair, extras []member) string {
 	lines := make([]pair, 0, 6)
 	add := func(label, value string) {
@@ -555,10 +556,78 @@ func renderSummary(rows []loadRow, meta []pair, extras []member) string {
 	for _, line := range lines {
 		fmt.Fprintf(&b, "| %s | %s |\n", cell(line.key), cell(line.value))
 	}
+	if table := loadTable(rows); table != "" {
+		b.WriteString("\n" + table)
+	}
 	if footer := metaLine(meta); footer != "" {
 		b.WriteString("\n" + footer + "\n")
 	}
 	return b.String()
+}
+
+// loadTable renders every measured cell as one row per scenario, so the README
+// carries the results themselves and not only the single sample above. Cells
+// read "RPS / p50 / errors"; the errors are what makes a fast cell a bad one.
+func loadTable(rows []loadRow) string {
+	if len(rows) == 0 {
+		return ""
+	}
+	type cellKey struct {
+		scenario    string
+		concurrency int
+	}
+	byCell := make(map[cellKey]loadRow, len(rows))
+	order := make([]string, 0, len(rows))
+	seenScenario := map[string]bool{}
+	concs := make([]int, 0, 3)
+	seenConc := map[int]bool{}
+	for _, row := range rows {
+		byCell[cellKey{row.Scenario, row.Concurrency}] = row
+		if !seenScenario[row.Scenario] {
+			seenScenario[row.Scenario] = true
+			order = append(order, row.Scenario)
+		}
+		if !seenConc[row.Concurrency] {
+			seenConc[row.Concurrency] = true
+			concs = append(concs, row.Concurrency)
+		}
+	}
+	sort.Strings(order)
+	sort.Ints(concs)
+
+	var b strings.Builder
+	b.WriteString("Load, every cell (RPS / p50 / errors):\n\n")
+	b.WriteString("| Scenario |")
+	for _, c := range concs {
+		fmt.Fprintf(&b, " c=%d |", c)
+	}
+	b.WriteString("\n|---|")
+	for range concs {
+		b.WriteString("---|")
+	}
+	b.WriteString("\n")
+	for _, scenario := range order {
+		fmt.Fprintf(&b, "| %s %s |", scenario, cell(scenarioLabel(scenario)))
+		for _, c := range concs {
+			row, ok := byCell[cellKey{scenario, c}]
+			if !ok {
+				b.WriteString(" — |")
+				continue
+			}
+			b.WriteString(" " + cell(loadCellText(row)) + " |")
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// loadCellText is one load cell: throughput, median, and how many calls failed.
+func loadCellText(row loadRow) string {
+	text := fmt.Sprintf("%.1f rps / %.1f ms / %d err", row.RPS, row.P50MS, row.Errors)
+	if row.Errors > 0 && row.N > 0 {
+		text += fmt.Sprintf(" (%.1f%%)", 100*float64(row.Errors)/float64(row.N))
+	}
+	return text
 }
 
 // selectOne picks the load row for the README line: the execute_sql row at

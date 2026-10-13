@@ -72,3 +72,26 @@ func TestOneLineSurfacesFailures(t *testing.T) {
 		t.Fatalf("oneLine value = %q, want %q", clean.value, want)
 	}
 }
+
+// TestLoadTableRendersEveryCell keeps the README's load table honest: one row
+// per scenario, one column per concurrency, a dash for a cell that was not
+// measured, and the failure rate on a cell that has failures.
+func TestLoadTableRendersEveryCell(t *testing.T) {
+	rows := []loadRow{
+		{Scenario: "S2", Concurrency: 8, N: 22821, RPS: 760.6, P50MS: 7.4, Errors: 8706},
+		{Scenario: "S1", Concurrency: 1, N: 80721, RPS: 2690.7, P50MS: 0.3},
+		{Scenario: "S2", Concurrency: 1, N: 19621, RPS: 654, P50MS: 1.3},
+	}
+	want := "Load, every cell (RPS / p50 / errors):\n" +
+		"\n" +
+		"| Scenario | c=1 | c=8 |\n" +
+		"|---|---|---|\n" +
+		"| S1 list_sources | 2690.7 rps / 0.3 ms / 0 err | — |\n" +
+		"| S2 execute_sql SELECT 1 | 654.0 rps / 1.3 ms / 0 err | 760.6 rps / 7.4 ms / 8706 err (38.1%) |\n"
+	if got := loadTable(rows); got != want {
+		t.Fatalf("loadTable =\n%q\nwant\n%q", got, want)
+	}
+	if got := loadTable(nil); got != "" {
+		t.Fatalf("loadTable(nil) = %q, want empty", got)
+	}
+}
