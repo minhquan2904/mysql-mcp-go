@@ -155,6 +155,17 @@ scripts/dev.sh test-report   # regenerate the reports below
 | RunReadOnly overhead vs direct query | +0.3 ms (single-use conn) |
 | Guard check (1KB SQL) | 31.8 µs |
 
+Load, every cell (RPS / p50 / errors):
+
+| Scenario | c=1 | c=8 | c=32 |
+|---|---|---|---|
+| S1 list_sources | 2690.7 rps / 0.3 ms / 0 err | 3933.8 rps / 1.8 ms / 0 err | 2884.0 rps / 10.6 ms / 0 err |
+| S2 execute_sql SELECT 1 | 654.0 rps / 1.3 ms / 0 err | 760.6 rps / 7.4 ms / 8706 err (38.1%) | 890.2 rps / 31.3 ms / 4126 err (15.4%) |
+| S3 execute_sql SELECT * FROM orders | 419.4 rps / 1.6 ms / 1464 err (11.6%) | 755.7 rps / 9.9 ms / 1741 err (7.7%) | 783.2 rps / 27.3 ms / 5096 err (21.7%) |
+| S4 execute_sql 1000 rows (order_items cross join) | 66.5 rps / 14.8 ms / 0 err | 223.6 rps / 35.1 ms / 0 err | 231.4 rps / 137.3 ms / 0 err |
+| S5 list_tables detailed | 47.7 rps / 19.2 ms / 0 err | 159.0 rps / 49.2 ms / 0 err | 158.5 rps / 201.0 ms / 0 err |
+| S6 execute_sql DELETE (guard rejection) | 2615.3 rps / 0.3 ms / 0 err | 3802.7 rps / 1.9 ms / 0 err | 2892.3 rps / 10.6 ms / 0 err |
+
 Measured on: 4 vCPU Intel(R) Core(TM) Ultra 7 265KF, 8.3 GB, MySQL 8.4.11 (same host), commit a48e5a2ac7fbd82d922c6d25f812cb798cf9f84b, 2026-10-13T06:44:03Z. Full report: docs/benchmarks.md
 
 <!-- BENCH:END -->
