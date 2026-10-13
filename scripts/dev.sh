@@ -22,8 +22,15 @@ rsh() { ssh -o BatchMode=yes "$VM" "mkdir -p ~/.cache/mtg && cd $DIR && $1"; }
 
 sync_up() {
   ssh -o BatchMode=yes "$VM" "mkdir -p ~/.cache/mtg $DIR"
+  # The excludes also protect what the host generates: .bench/ and
+  # .testreport/ are the bench and report workspaces, and docs/*.md is written
+  # there by cmd/benchreport and scripts/test-report.sh. A plain --delete
+  # without these would wipe them on the next sync (e.g. when test-report runs
+  # after bench).
   rsync -az --delete --exclude .git --exclude .env --exclude .dev.env --exclude .DS_Store \
-    --exclude testdata/fuzz ./ "$VM:$DIR/"
+    --exclude testdata/fuzz --exclude .bench --exclude .testreport \
+    --exclude docs/benchmarks.md --exclude docs/test-report.md \
+    ./ "$VM:$DIR/"
 }
 
 pull_mod() {
@@ -94,8 +101,16 @@ case "$cmd" in
     sync_up
     rsh "scripts/e2e.sh"
     ;;
+  bench)
+    sync_up
+    rsh "COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo unknown) scripts/bench.sh $(q "$@")"
+    ;;
+  test-report)
+    sync_up
+    rsh "COMMIT_SHA=$(git rev-parse HEAD 2>/dev/null || echo unknown) scripts/test-report.sh $(q "$@")"
+    ;;
   *)
-    echo "usage: dev.sh {sync|test [args]|go <args>|vuln|fuzz <pkg> <Fuzz>|up|down [-v]|stop|logs|it [args] (KEEP_DB=1 keeps the DB up)|e2e}" >&2
+    echo "usage: dev.sh {sync|test [args]|go <args>|vuln|fuzz <pkg> <Fuzz>|up|down [-v]|stop|logs|it [args] (KEEP_DB=1 keeps the DB up)|e2e|bench|test-report}" >&2
     exit 2
     ;;
 esac
